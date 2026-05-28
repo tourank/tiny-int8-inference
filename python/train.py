@@ -110,7 +110,21 @@ def export_tensor(tensor, path):
     print(f"wrote {path}: shape={tuple(array.shape)}, dtype={array.dtype}")
 
 
+print("fc1.weight first 10:")
+print(model.fc1.weight.detach().cpu().flatten()[:10])
+
 export_tensor(model.fc1.weight, "data/fc1_weight.bin")
 export_tensor(model.fc1.bias,   "data/fc1_bias.bin")
 export_tensor(model.fc2.weight, "data/fc2_weight.bin")
 export_tensor(model.fc2.bias,   "data/fc2_bias.bin")
+
+image, label = test_data[0]
+
+image_array = image.detach().cpu().contiguous().numpy().astype("float32")
+image_array.tofile("data/test_image_0.bin")
+
+with open("data/test_label_0.txt", "w") as f:
+    f.write(str(label))
+
+print("wrote data/test_image_0.bin")
+print("wrote data/test_label_0.txt")
