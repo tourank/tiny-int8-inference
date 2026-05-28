@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 
+torch.manual_seed(0)
+
 training_data = datasets.MNIST(
     root="data",
     train=True,
@@ -128,3 +130,10 @@ with open("data/test_label_0.txt", "w") as f:
 
 print("wrote data/test_image_0.bin")
 print("wrote data/test_label_0.txt")
+
+with torch.no_grad():
+    x = model.flatten(image.unsqueeze(0))
+    h_pre_relu = model.fc1(x)
+
+print("fc1 pre-ReLU first 10:")
+print(h_pre_relu.flatten()[:10])
