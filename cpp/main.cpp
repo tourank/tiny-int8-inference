@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <chrono>
 
 // fc1.weight first 10:
 // tensor([-0.0003,  0.0192, -0.0294, -0.0263, -0.0138,  0.0096, -0.0007,  0.0283, -0.0032,  0.0095])
@@ -114,6 +115,8 @@ int main() {
     std::vector<float> hidden(FC1_OUT);
     std::vector<float> logits(FC2_OUT);
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     int correct = 0;
 
     for(int n = 0; n < NUM_TEST; n++) {
@@ -132,10 +135,20 @@ int main() {
         }
     }
 
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> elapsed = end - start;
+
     float accuracy = static_cast<float>(correct) / NUM_TEST;
+    double total_seconds = elapsed.count();
+    double ms_per_image = (total_seconds * 1000.0) / NUM_TEST;
+    double images_per_second = NUM_TEST / total_seconds;
 
     std::cout << "correct: " << correct << " / " << NUM_TEST << "\n";
     std::cout << "accuracy: " << accuracy << "\n";
+    std::cout << "total time: " << total_seconds << " seconds\n";
+    std::cout << "ms per image: " << ms_per_image << "\n";
+    std::cout << "images/sec: " << images_per_second << "\n";
 
     return 0;
 }
