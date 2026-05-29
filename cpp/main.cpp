@@ -77,7 +77,55 @@ std::vector<int64_t> load_int64_file(const std::string& path, int expected_count
     }
 
     return data;
+}
 
+std::vector<int8_t> load_int8_file(const std::string& path, int expected_count) {
+    std::vector<int8_t> data(expected_count);
+
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file) {
+        std::cerr << "Failed to open file: " << path << "\n";
+        std::exit(1);
+    }
+
+    file.read(
+        reinterpret_cast<char*>(data.data()),
+        expected_count * sizeof(int8_t)
+    );
+
+    if (!file) {
+        std::cerr << "Failed to read expected bytes from: " << path << "\n";
+        std::exit(1);
+    }
+
+    return data;
+}
+
+std::vector<float> load_scales_file(const std::string& path) {
+    std::ifstream file(path);
+
+    if (!file) {
+        std::cerr << "Failed to open file: " << path << "\n";
+        std::exit(1);
+    }
+
+    std::vector<float> scales;
+    float value;
+
+    while (file >> value) {
+        scales.push_back(value);
+    }
+
+    return scales;
+}
+
+std::vector<float> dequantize_int8_weights(const std::vector<int8_t>& q_weights, float scale) {
+    std::vector<float> weights(q_weights.size());
+    for (int i = 0; i < static_cast<int>(q_weights.size()); i++) {
+        weights[i] = static_cast<float>(q_weights[i]) * scale;
+    }
+    return weights;
 }
 
 int argmax(const std::vector<float>& values) {
@@ -93,6 +141,21 @@ int argmax(const std::vector<float>& values) {
     return best_index;
 }
 
+int predict_fp32(
+    const std::vector<float>& image,
+    const std::vector<float>& fc1_weight,
+    const std::vector<float>& fc1_bias,
+    const std::vector<float>& fc2_weight,
+    const std::vector<float>& fc2_bias,
+    std::vector<float>& hidden,
+    std::vector<float>& logits
+) {
+    linear(image, fc1_weight, fc1_bias, hidden, 784, 128);
+    relu(hidden);
+    linear(hidden, fc2_weight, fc2_bias, logits, 128, 10);
+    return argmax(logits);
+}
+
 int main() {
     const int FC1_OUT = 128;
     const int FC1_IN = 784;
@@ -106,6 +169,16 @@ int main() {
     std::vector<float> fc1_weight = load_float_file("data/fc1_weight.bin", FC1_OUT * FC1_IN);
     std::vector<float> fc2_weight = load_float_file("data/fc2_weight.bin", FC2_OUT * FC2_IN);
 
+    std::vector<int8_t> fc1_weight_int8 = load_int8_file("data/fc1_weight_int8.bin", FC1_OUT * FC1_IN);
+    std::vector<int8_t> fc2_weight_int8 = load_int8_file("data/fc2_weight_int8.bin", FC2_OUT * FC2_IN);
+
+    std::vector<float> weight_scales = load_scales_file("data/weight_scales.txt");
+
+    float fc1_weight_scale = weight_scales[0];
+    float fc2_weight_scale = weight_scales[1];
+
+    std::vector<float> fc1_weight_dequant = dequantize_int8_weights(fc1_weight_int8, fc1_weight_scale);
+    std::vector<float> fc2_weight_dequant = dequantize_int8_weights(fc2_weight_int8, fc2_weight_scale);
 
     std::vector<float> fc1_bias = load_float_file("data/fc1_bias.bin", FC1_OUT);
     std::vector<float> fc2_bias = load_float_file("data/fc2_bias.bin", FC2_OUT);
@@ -124,11 +197,15 @@ int main() {
             image[j] = test_images[n * FC1_IN + j];
         }
 
-        linear(image, fc1_weight, fc1_bias, hidden, FC1_IN, FC1_OUT);
-        relu(hidden);
-        linear(hidden, fc2_weight, fc2_bias, logits, FC2_IN, FC2_OUT);
-
-        int prediction = argmax(logits);
+        int prediction = predict_fp32(
+            image,
+            fc1_weight_dequant,
+            fc1_bias,
+            fc2_weight_dequant,
+            fc2_bias,
+            hidden,
+            logits
+        );
 
         if (prediction == test_labels[n]) {
             correct++;
