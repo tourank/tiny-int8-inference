@@ -94,26 +94,11 @@ with torch.no_grad():
     logits = model(image.unsqueeze(0))
     prediction = logits.argmax(dim=1).item()
 
-print("fc1.weight", model.fc1.weight.shape)
-print("fc1.bias", model.fc1.bias.shape)
-print("fc2.weight", model.fc2.weight.shape)
-print("fc2.bias", model.fc2.bias.shape)
-
-
-print("image shape:", image.shape)
-print("batched image shape:", image.unsqueeze(0).shape)
-print("logits shape:", logits.shape)
-print("prediction:", prediction)
-print("label:", label)
-
 def export_tensor(tensor, path):
     array = tensor.detach().cpu().contiguous().numpy().astype("float32")
     array.tofile(path)
     print(f"wrote {path}: shape={tuple(array.shape)}, dtype={array.dtype}")
 
-
-print("fc1.weight first 10:")
-print(model.fc1.weight.detach().cpu().flatten()[:10])
 
 export_tensor(model.fc1.weight, "data/fc1_weight.bin")
 export_tensor(model.fc1.bias,   "data/fc1_bias.bin")
@@ -135,5 +120,24 @@ with torch.no_grad():
     x = model.flatten(image.unsqueeze(0))
     h_pre_relu = model.fc1(x)
 
-print("fc1 pre-ReLU first 10:")
-print(h_pre_relu.flatten()[:10])
+all_test_images = []
+all_test_labels = []
+
+for image, label in test_data:
+    all_test_images.append(image)
+    all_test_labels.append(label)
+
+all_test_images = torch.stack(all_test_images) # [10000, 1, 28, 28]
+all_test_labels = torch.tensor(all_test_labels, dtype=torch.int64)
+
+print("all_test_images shape:", all_test_images.shape)
+print("all_test_labels shape:", all_test_labels.shape)
+
+all_test_images_array = all_test_images.detach().cpu().contiguous().numpy().astype("float32")
+all_test_labels_array = all_test_labels.detach().cpu().contiguous().numpy().astype("int64")
+
+all_test_images_array.tofile("data/test_images.bin")
+all_test_labels_array.tofile("data/test_labels.bin")
+
+print("wrote data/test_images.bin")
+print("wrote data/test_labels.bin")
