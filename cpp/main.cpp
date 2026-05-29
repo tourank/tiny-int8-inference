@@ -4,6 +4,7 @@
 #include <string>
 #include <cstdint>
 #include <chrono>
+#include <cmath>
 
 // fc1.weight first 10:
 // tensor([-0.0003,  0.0192, -0.0294, -0.0263, -0.0138,  0.0096, -0.0007,  0.0283, -0.0032,  0.0095])
@@ -128,6 +129,69 @@ std::vector<float> dequantize_int8_weights(const std::vector<int8_t>& q_weights,
     return weights;
 }
 
+std::vector<int8_t> quantize_symmetric_int8_vector(
+    const std::vector<float>& values,
+    float& scale
+) {
+    float max_abs = 0.0f;
+
+    for(float v : values) {
+        float abs_v = std::abs(v);
+        if (abs_v > max_abs) {
+            max_abs = abs_v;
+        }
+    }
+
+    if (max_abs == 0.0f) {
+        scale = 1.0f;
+    }
+    else {
+        scale = max_abs / 127.0f;
+    }
+
+    std::vector<int8_t> q(values.size());
+
+    for (int i = 0; i < static_cast<int>(values.size()); i++) {
+        int rounded = static_cast<int>(std::round(values[i] / scale));
+
+        if (rounded > 127) {
+            rounded = 127;
+        }
+        if (rounded < -127) {
+            rounded = -127;
+        }
+
+        q[i] = static_cast<int8_t>(rounded);
+    }
+
+    return q;
+}
+
+void int8_linear_to_float(
+    const std::vector<int8_t>& input_q,
+    float input_scale,
+    const std::vector<int8_t>& weight_q,
+    float weight_scale,
+    const std::vector<float>& bias,
+    std::vector<float>& output,
+    int in_features,
+    int out_features
+){
+    float combined_scale = input_scale * weight_scale;
+
+    for (int i = 0; i < out_features; i++) {
+        int32_t acc = 0;
+        for (int j = 0; j < in_features; j++) {
+            int32_t x = static_cast<int32_t>(input_q[j]);
+            int32_t w = static_cast<int32_t>(weight_q[i * in_features + j]);
+
+            acc += x * w;
+        }
+
+        output[i] = bias[i] + combined_scale * static_cast<float>(acc);
+    }
+}
+
 int argmax(const std::vector<float>& values) {
     int best_index = 0;
     float best_value = values[0];
@@ -155,6 +219,7 @@ int predict_fp32(
     linear(hidden, fc2_weight, fc2_bias, logits, 128, 10);
     return argmax(logits);
 }
+
 
 int main() {
     const int FC1_OUT = 128;
@@ -187,6 +252,38 @@ int main() {
     std::vector<float> image(FC1_IN);
     std::vector<float> hidden(FC1_OUT);
     std::vector<float> logits(FC2_OUT);
+
+    for (int j = 0; j < FC1_IN; j++) {
+        image[j] = test_images[j];
+    }
+
+    std::vector<float> hidden_fp32(FC1_OUT);
+    linear(image, fc1_weight_dequant, fc1_bias, hidden_fp32, FC1_IN, FC1_OUT);
+
+    float image_scale = 1.0f;
+    std::vector<int8_t> image_q = quantize_symmetric_int8_vector(image, image_scale);
+    std::vector<float> hidden_int8_fc1(FC1_OUT);
+
+    int8_linear_to_float(
+        image_q,
+        image_scale,
+        fc1_weight_int8,
+        fc1_weight_scale,
+        fc1_bias,
+        hidden_int8_fc1,
+        FC1_IN,
+        FC1_OUT
+    );
+
+    std::cout << "fc1 dequant-weight float first 10:\n";
+    for (int i = 0; i < 10; i++) {
+        std::cout << hidden_fp32[i] << "\n";
+    }
+
+    std::cout << "fc1 int8-matmul-to-float first 10:\n";
+    for (int i = 0; i < 10; i++) {
+        std::cout << hidden_int8_fc1[i] << "\n";
+    }
 
     auto start = std::chrono::high_resolution_clock::now();
 
