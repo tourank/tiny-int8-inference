@@ -350,6 +350,10 @@ int main() {
             image[j] = test_images[n * FC1_IN + j];
         }
 
+        // predict_fp32 (fp32 weights + fp32 matmul), 
+        // predict_fp32 (int8 weights dequantized to float + fp32 matmul),
+        // predict_int8_fc1_float_fc2
+        // predict_int8_fc1_int8_fc2
         int prediction = predict_int8_fc1_int8_fc2(
             image,
             fc1_weight_int8,
