@@ -261,6 +261,53 @@ int predict_int8_fc1_float_fc2(
 
 }
 
+int predict_int8_fc1_int8_fc2(
+    const std::vector<float>& image,
+    const std::vector<int8_t>& fc1_weight_int8,
+    float fc1_weight_scale,
+    const std::vector<float>& fc1_bias,
+    const std::vector<int8_t>& fc2_weight_int8,
+    float fc2_weight_scale,
+    const std::vector<float>& fc2_bias,
+    std::vector<float>& hidden,
+    std::vector<float>& logits
+)
+{
+    float image_scale = 1.0f;
+
+    std::vector<int8_t> image_q = quantize_symmetric_int8_vector(image, image_scale);
+
+    int8_linear_to_float(
+        image_q,
+        image_scale,
+        fc1_weight_int8,
+        fc1_weight_scale,
+        fc1_bias,
+        hidden,
+        784,
+        128
+    );
+
+    relu(hidden);
+
+    float hidden_scale = 1.0f;
+
+    std::vector<int8_t> hidden_q = quantize_symmetric_int8_vector(hidden, hidden_scale);
+
+    int8_linear_to_float(
+        hidden_q,
+        hidden_scale,
+        fc2_weight_int8,
+        fc2_weight_scale,
+        fc2_bias,
+        logits,
+        128,
+        10
+    );
+
+    return argmax(logits);
+}
+
 
 int main() {
     const int FC1_OUT = 128;
@@ -303,12 +350,13 @@ int main() {
             image[j] = test_images[n * FC1_IN + j];
         }
 
-        int prediction = predict_int8_fc1_float_fc2(
+        int prediction = predict_int8_fc1_int8_fc2(
             image,
             fc1_weight_int8,
             fc1_weight_scale,
             fc1_bias,
-            fc2_weight_dequant,
+            fc2_weight_int8,
+            fc2_weight_scale,
             fc2_bias,
             hidden,
             logits
